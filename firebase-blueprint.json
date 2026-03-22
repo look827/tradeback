@@ -1,0 +1,65 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Stores user-specific settings and aggregate statistics.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "totalPnL": { "type": "number" },
+        "winRate": { "type": "number" },
+        "totalTrades": { "type": "integer" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Trade": {
+      "title": "Backtesting Trade",
+      "description": "A single simulated trade record.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "symbol": { "type": "string" },
+        "type": { "type": "string", "enum": ["BUY", "SELL"] },
+        "entryPrice": { "type": "number" },
+        "exitPrice": { "type": "number" },
+        "quantity": { "type": "number" },
+        "pnl": { "type": "number" },
+        "tp": { "type": "number", "description": "Take Profit price" },
+        "sl": { "type": "number", "description": "Stop Loss price" },
+        "entryDate": { "type": "string", "format": "date-time" },
+        "exitDate": { "type": "string", "format": "date-time" },
+        "notes": { "type": "string" }
+      },
+      "required": ["userId", "symbol", "type", "entryPrice", "exitPrice", "quantity", "pnl"]
+    },
+    "News": {
+      "title": "Market News",
+      "description": "Upcoming or recent market news events.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "impact": { "type": "string", "enum": ["High", "Medium", "Low"] },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "category": { "type": "string" }
+      },
+      "required": ["title", "impact", "timestamp"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profile documents"
+    },
+    "trades/{tradeId}": {
+      "schema": "Trade",
+      "description": "Individual trade records"
+    },
+    "news/{newsId}": {
+      "schema": "News",
+      "description": "Market news items"
+    }
+  }
+}

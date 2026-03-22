@@ -1,0 +1,138 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId} (matches request.auth.uid)
+    // Fields:
+    //   - uid: string (required)
+    //   - displayName: string (optional)
+    //   - email: string (required)
+    //   - totalPnL: number (optional)
+    //   - winRate: number (optional)
+    //   - totalTrades: int (optional)
+    //
+    // Collection: trades
+    // Document ID: {tradeId}
+    // Fields:
+    //   - userId: string (required, must match request.auth.uid)
+    //   - symbol: string (required)
+    //   - type: string (required, BUY/SELL)
+    //   - entryPrice: number (required, > 0)
+    //   - exitPrice: number (required, > 0)
+    //   - quantity: number (required, > 0)
+    //   - pnl: number (required)
+    //   - entryDate: string (required, ISO 8601)
+    //   - exitDate: string (required, ISO 8601)
+    //   - notes: string (optional)
+    //
+    // Collection: news
+    // Document ID: {newsId}
+    // Fields:
+    //   - title: string (required)
+    //   - content: string (required)
+    //   - impact: string (required, High/Medium/Low)
+    //   - timestamp: string (required, ISO 8601)
+    //   - category: string (optional)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "sehajintheusa@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.size() >= 10;
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email']) &&
+             data.uid == request.auth.uid &&
+             isValidEmail(data.email) &&
+             (data.displayName == null || (data.displayName is string && data.displayName.size() < 100)) &&
+             (data.totalPnL == null || data.totalPnL is number) &&
+             (data.winRate == null || data.winRate is number) &&
+             (data.totalTrades == null || data.totalTrades is int);
+    }
+
+    function isValidTrade(data) {
+      let requiredFields = ['userId', 'symbol', 'type', 'entryPrice', 'exitPrice', 'quantity', 'pnl', 'entryDate', 'exitDate'];
+      let allowedFields = ['userId', 'symbol', 'type', 'entryPrice', 'exitPrice', 'quantity', 'pnl', 'entryDate', 'exitDate', 'tp', 'sl', 'notes'];
+      return data.keys().hasAll(requiredFields) &&
+             data.keys().hasOnly(allowedFields) &&
+             data.userId == request.auth.uid &&
+             data.symbol is string && data.symbol.size() > 0 && data.symbol.size() < 20 &&
+             data.type in ['BUY', 'SELL'] &&
+             data.entryPrice is number && data.entryPrice > 0 &&
+             data.exitPrice is number && data.exitPrice > 0 &&
+             data.quantity is number && data.quantity > 0 &&
+             data.pnl is number &&
+             isValidDateString(data.entryDate) &&
+             isValidDateString(data.exitDate) &&
+             (!('tp' in data) || data.tp == null || data.tp is number) &&
+             (!('sl' in data) || data.sl == null || data.sl is number) &&
+             (!('notes' in data) || data.notes == null || (data.notes is string && data.notes.size() < 1000));
+    }
+
+    function isValidNews(data) {
+      return data.keys().hasAll(['title', 'content', 'impact', 'timestamp']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.content is string && data.content.size() > 0 && data.content.size() < 5000 &&
+             data.impact in ['High', 'Medium', 'Low'] &&
+             isValidDateString(data.timestamp);
+    }
+
+    // ===============================================================
+    // Match Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data);
+    }
+
+    match /trades/{tradeId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && isValidTrade(request.resource.data);
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && isValidTrade(request.resource.data);
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    match /news/{newsId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin() && isValidNews(request.resource.data);
+    }
+
+    // Default deny
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}
